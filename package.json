@@ -4,7 +4,8 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-    	"dev": "node backend/server.js",
+		"init:db": "node script/init-db.js",
+		"dev": "node backend/server.js",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
@@ -31,8 +32,9 @@
 		"dotenv": "^17.2.3",
 		"express": "^5.1.0",
 		"express-rate-limit": "^8.1.0",
+		"fs": "^0.0.1-security",
 		"helmet": "^8.1.0",
+		"mysql2": "^3.15.1",
 		"sirv": "^3.0.2"
 	}
 }
-

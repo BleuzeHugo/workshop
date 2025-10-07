@@ -5,6 +5,7 @@ import sirv from 'sirv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
+import apiRoutes from './routes/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,6 +16,8 @@ const PORT = process.env.PORT || 3000;
 const app = express();
 app.use(compression());
 app.use(express.json());
+
+app.use('/api', apiRoutes);
 
 // Exemple de route API
 app.get('/api/hello', (req, res) => {

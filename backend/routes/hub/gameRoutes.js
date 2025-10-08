@@ -24,17 +24,22 @@ router.get("/", async (_req, res) => {
 // POST /api/games - Créer un nouveau jeu
 router.post("/", async (req, res) => {
   const { name } = req.body;
-  
+
   if (!name) {
     return res.status(400).json({ error: "Nom du groupe requis" });
   }
 
   try {
-    const [result] = await pool.query(
-      "INSERT INTO game (name) VALUES (?)", 
-      [name]
-    );
-    res.json({ id: result.insertId, name });
+    const [result] = await pool.query("INSERT INTO game (name) VALUES (?)", [
+      name,
+    ]);
+
+    const newGame = { id: result.insertId, name, player_count: 0 };
+
+    req.app.locals.io.emit("game:created", newGame);
+
+    res.json(newGame);
+    // res.json({ id: result.insertId, name });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -46,72 +51,56 @@ router.post("/:gameId/join", async (req, res) => {
   const { gameId } = req.params;
   const { playerId } = req.body;
 
-  // Validation des IDs
   if (!playerId) {
     return res.status(400).json({ error: "ID du joueur requis" });
   }
 
   try {
-    // Vérifier si le jeu existe
-    const [games] = await pool.query(
-      "SELECT id FROM game WHERE id = ?",
-      [gameId]
-    );
+    // Vérifications existantes...
+    const [games] = await pool.query("SELECT id FROM game WHERE id = ?", [gameId]);
+    if (games.length === 0) return res.status(404).json({ error: "Jeu non trouvé" });
 
-    if (games.length === 0) {
-      return res.status(404).json({ error: "Jeu non trouvé" });
-    }
+    const [players] = await pool.query("SELECT id FROM player WHERE id = ?", [playerId]);
+    if (players.length === 0) return res.status(404).json({ error: "Joueur non trouvé" });
 
-    // Vérifier si le joueur existe
-    const [players] = await pool.query(
-      "SELECT id FROM player WHERE id = ?",
-      [playerId]
-    );
-
-    if (players.length === 0) {
-      return res.status(404).json({ error: "Joueur non trouvé" });
-    }
-
-    // Vérifier si le joueur est déjà dans ce jeu
     const [existing] = await pool.query(
       "SELECT * FROM player_game WHERE player_id = ? AND game_id = ?",
       [playerId, gameId]
     );
+    if (existing.length > 0) return res.status(400).json({ error: "Le joueur est déjà dans ce jeu" });
 
-    if (existing.length > 0) {
-      return res.status(400).json({ error: "Le joueur est déjà dans ce jeu" });
-    }
-
-    // Compter les joueurs dans le jeu
     const [[{ player_count }]] = await pool.query(
       "SELECT COUNT(*) AS player_count FROM player_game WHERE game_id = ?",
       [gameId]
     );
+    if (player_count >= 4) return res.status(400).json({ error: "Ce groupe est complet !" });
 
-    if (player_count >= 4) {
-      return res.status(400).json({ error: "Ce groupe est complet ! (4 joueurs maximum)" });
-    }
-
-    // Ajouter le joueur au jeu
+    // Ajouter le joueur
     await pool.query(
       "INSERT INTO player_game (player_id, game_id) VALUES (?, ?)",
       [playerId, gameId]
     );
 
+    // 🔥 Récupérer les données mises à jour du jeu
+    const [[updatedGame]] = await pool.query(`
+      SELECT g.*, COUNT(pg.player_id) AS player_count
+      FROM game g
+      LEFT JOIN player_game pg ON g.id = pg.game_id
+      WHERE g.id = ?
+      GROUP BY g.id
+    `, [gameId]);
+
+    // 🔥 Émettre la mise à jour à tous les clients
+    req.app.locals.io.emit('game:updated', updatedGame);
+
     res.json({ 
       success: true, 
       message: "Joueur ajouté au groupe",
-      player_count: player_count + 1
+      game: updatedGame
     });
 
   } catch (err) {
     console.error(err);
-    
-    // Gestion des erreurs de clé étrangère
-    if (err.code === 'ER_NO_REFERENCED_ROW') {
-      return res.status(400).json({ error: "Jeu ou joueur non trouvé" });
-    }
-    
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
@@ -121,12 +110,15 @@ router.get("/:gameId/players", async (req, res) => {
   const { gameId } = req.params;
 
   try {
-    const [players] = await pool.query(`
+    const [players] = await pool.query(
+      `
       SELECT p.id, p.name
       FROM player p
       INNER JOIN player_game pg ON p.id = pg.player_id
       WHERE pg.game_id = ?
-    `, [gameId]);
+    `,
+      [gameId]
+    );
 
     res.json(players);
   } catch (err) {

@@ -1,19 +1,20 @@
 <script>
   import { onMount, onDestroy } from "svelte";
-  import { getSocket, disconnectSocket } from "$lib/socket"; // Modifié
+  import { getSocket } from "$lib/socket";
+  import { page } from '$app/stores'; // ✅ Ajout pour la navigation
+  import { goto } from '$app/navigation'; // ✅ Ajout pour la navigation
 
   let playerName = "";
   let player = null;
   let groups = [];
   let newGroupName = "";
   let loading = false;
-  let socket; // Variable pour stocker l'instance socket
+  let socket;
+  let currentPlayerGroup = null;
 
   onMount(async () => {
-    // Initialiser la connexion socket
     socket = getSocket();
     
-    // Écouter les nouveaux groupes créés
     socket.on('game:created', (newGame) => {
       console.log('🎮 Nouveau groupe créé:', newGame);
       if (!groups.find(g => g.id === newGame.id)) {
@@ -21,7 +22,6 @@
       }
     });
 
-    // Écouter les mises à jour des groupes
     socket.on('game:updated', (updatedGame) => {
       console.log('🔄 Groupe mis à jour:', updatedGame);
       groups = groups.map(group => 
@@ -30,17 +30,36 @@
     });
 
     if (player) {
+      await loadPlayerMembership();
       await loadGroups();
     }
   });
 
   onDestroy(() => {
-    // Nettoyer les listeners
     if (socket) {
       socket.off('game:created');
       socket.off('game:updated');
     }
   });
+
+  async function loadPlayerMembership() {
+    if (!player) return;
+    
+    try {
+      const res = await fetch(`/api/games/player/${player.id}/membership`);
+      const data = await res.json();
+      
+      if (data.inGroup) {
+        currentPlayerGroup = data.game;
+        // ✅ Rediriger vers la page du groupe si déjà membre
+        goto(`/group/${currentPlayerGroup.id}`);
+      } else {
+        currentPlayerGroup = null;
+      }
+    } catch (error) {
+      console.error("Erreur chargement membership:", error);
+    }
+  }
 
   async function createPlayer() {
     if (!playerName.trim()) return;
@@ -53,13 +72,14 @@
         body: JSON.stringify({ name: playerName })
       });
       
-      if (!res.ok) throw new Error("Erreur lors de la création du joueur");
+      if (!res.ok) throw new Error("Erreur création joueur");
       
       player = await res.json();
+      currentPlayerGroup = null;
       await loadGroups();
     } catch (error) {
       console.error("Erreur:", error);
-      alert("Erreur lors de la création du joueur");
+      alert("Erreur création joueur");
     } finally {
       loading = false;
     }
@@ -68,11 +88,11 @@
   async function loadGroups() {
     try {
       const res = await fetch("/api/games");
-      if (!res.ok) throw new Error("Erreur de chargement");
+      if (!res.ok) throw new Error("Erreur chargement");
       groups = await res.json();
     } catch (error) {
       console.error("Erreur:", error);
-      alert("Erreur lors du chargement des groupes");
+      alert("Erreur chargement groupes");
     }
   }
 
@@ -88,19 +108,21 @@
       
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.error || "Erreur de création");
+        throw new Error(error.error || "Erreur création");
       }
       
-      const data = await res.json();
-      // Pas besoin d'ajouter manuellement, Socket.IO s'en occupe !
       newGroupName = "";
     } catch (error) {
-      console.error("Erreur:", error);
       alert(error.message);
     }
   }
 
   async function joinGroup(groupId) {
+    if (currentPlayerGroup) {
+      alert(`❌ Tu es déjà dans le groupe "${currentPlayerGroup.name}"`);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/games/${groupId}/join`, {
         method: "POST",
@@ -113,20 +135,19 @@
       if (data.error) {
         alert(data.error);
       } else {
-        alert("✅ Tu as rejoint le groupe !");
-        // Les sockets mettront à jour automatiquement l'interface
+        // ✅ Rediriger vers la page du groupe après avoir rejoint
+        goto(`/group/${groupId}`);
       }
     } catch (error) {
-      console.error("Erreur:", error);
-      alert("Erreur lors de la connexion au groupe");
+      alert("Erreur connexion groupe");
     }
   }
 
-  // Fonction pour quitter la page proprement
   function disconnect() {
     player = null;
     playerName = "";
     groups = [];
+    currentPlayerGroup = null;
   }
 </script>
 
@@ -159,21 +180,35 @@
         </button>
       </div>
 
-      <div class="game-section">
-        <h3>🏗️ Créer un groupe</h3>
-        <input 
-          placeholder="Nom du groupe" 
-          bind:value={newGroupName} 
-          maxlength="30"
-        />
-        <button 
-          class="create-btn" 
-          on:click={createGroup} 
-          disabled={!newGroupName.trim()}
-        >
-          Créer le groupe
-        </button>
-      </div>
+      {#if currentPlayerGroup}
+        <div class="current-group">
+          <h3>🎯 Tu es déjà dans un groupe</h3>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <strong>{currentPlayerGroup.name}</strong> 
+            </div>
+            <button class="join-btn" on:click={() => goto(`/group/${currentPlayerGroup.id}`)}>
+              Rejoindre le groupe
+            </button>
+          </div>
+        </div>
+      {:else}
+        <div class="game-section">
+          <h3>🏗️ Créer un groupe</h3>
+          <input 
+            placeholder="Nom du groupe" 
+            bind:value={newGroupName} 
+            maxlength="30"
+          />
+          <button 
+            class="create-btn" 
+            on:click={createGroup} 
+            disabled={!newGroupName.trim()}
+          >
+            Créer le groupe
+          </button>
+        </div>
+      {/if}
 
       <div class="game-section">
         <h3>👥 Groupes disponibles <span class="real-time-badge">Temps réel</span></h3>
@@ -199,9 +234,15 @@
               <button 
                 class="join-btn" 
                 on:click={() => joinGroup(group.id)} 
-                disabled={group.player_count >= 4}
+                disabled={group.player_count >= 4 || currentPlayerGroup}
               >
-                {group.player_count >= 4 ? "Complet" : "Rejoindre"}
+                {#if currentPlayerGroup}
+                  Déjà dans un groupe
+                {:else if group.player_count >= 4}
+                  Complet
+                {:else}
+                  Rejoindre
+                {/if}
               </button>
             </div>
           {/each}
@@ -212,6 +253,7 @@
 </div>
 
 <style>
+  /* Styles inchangés */
   .container {
     max-width: 600px;
     margin: 0 auto;
@@ -333,24 +375,11 @@
     margin-left: 0.5rem;
   }
 
-  .loading {
-    opacity: 0.6;
-    pointer-events: none;
-  }
-
-  .status-indicator {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    margin-right: 0.5rem;
-  }
-
-  .status-online {
-    background: #4CAF50;
-  }
-
-  .status-offline {
-    background: #ccc;
+  .current-group {
+    background: #e8f5e8;
+    border: 2px solid #4CAF50;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
   }
 </style>

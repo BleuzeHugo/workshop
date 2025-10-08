@@ -46,6 +46,31 @@ router.post("/", async (req, res) => {
   }
 });
 
+router.get("/:groupId", async (req, res) => {
+  const { groupId } = req.params;
+
+  try {
+    const [games] = await pool.query(`
+      SELECT 
+        g.*, 
+        COUNT(pg.player_id) AS player_count
+      FROM game g
+      LEFT JOIN player_game pg ON g.id = pg.game_id
+      WHERE g.id = ?
+      GROUP BY g.id
+    `, [groupId]);
+
+    if (games.length === 0) {
+      return res.status(404).json({ error: "Groupe non trouvé" });
+    }
+
+    res.json(games[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 // POST /api/games/:gameId/join - Rejoindre un jeu
 router.post("/:gameId/join", async (req, res) => {
   const { gameId } = req.params;

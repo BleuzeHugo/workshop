@@ -31,11 +31,54 @@ app.use(express.json());
 app.use('/api', apiRoutes);
 
 // 🔥 Gestion des connexions Socket.IO
+// io.on('connection', (socket) => {
+//   console.log('🔌 Utilisateur connecté:', socket.id);
+
+//   // Rejoindre une room "games" pour les mises à jour des jeux
+//   socket.join('games');
+
+//   socket.on('disconnect', () => {
+//     console.log('❌ Utilisateur déconnecté:', socket.id);
+//   });
+// });
+
 io.on('connection', (socket) => {
   console.log('🔌 Utilisateur connecté:', socket.id);
 
-  // Rejoindre une room "games" pour les mises à jour des jeux
-  socket.join('games');
+  // Rejoindre une room spécifique
+  socket.on('join:group', (groupId) => {
+    socket.join(`group:${groupId}`);
+    console.log(`👥 Utilisateur ${socket.id} a rejoint group:${groupId}`);
+    
+    // Notifier les autres membres
+    socket.to(`group:${groupId}`).emit('user:joined', { userId: socket.id });
+  });
+
+  // Quitter une room
+  socket.on('leave:group', (groupId) => {
+    socket.leave(`group:${groupId}`);
+    console.log(`👋 Utilisateur ${socket.id} a quitté group:${groupId}`);
+  });
+
+  // Gestion du statut "prêt"
+  socket.on('player:toggle:ready', (data) => {
+    const { groupId, playerId, ready } = data;
+    
+    // Notifier tous les membres du groupe
+    io.to(`group:${groupId}`).emit('player:ready', {
+      playerId,
+      ready
+    });
+    
+    console.log(`✅ Joueur ${playerId} ${ready ? 'prêt' : 'non prêt'} dans group:${groupId}`);
+  });
+
+  // Démarrer le jeu
+  socket.on('game:start', (groupId) => {
+    // Vérifier que tous sont prêts (logique à implémenter)
+    io.to(`group:${groupId}`).emit('game:started');
+    console.log(`🚀 Jeu démarré pour group:${groupId}`);
+  });
 
   socket.on('disconnect', () => {
     console.log('❌ Utilisateur déconnecté:', socket.id);

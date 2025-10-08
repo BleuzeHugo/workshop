@@ -29,7 +29,10 @@ CREATE TABLE game (
 -- =====================================================
 CREATE TABLE player (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL
+    name VARCHAR(100) NOT NULL,
+    token VARCHAR(255) UNIQUE,
+    token_expires_at DATETIME,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- =====================================================
@@ -59,6 +62,7 @@ CREATE TABLE game_level (
 CREATE TABLE player_game (
     player_id INT NOT NULL,
     game_id INT NOT NULL,
+    is_ready BOOLEAN DEFAULT FALSE,
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (player_id, game_id),
     FOREIGN KEY (player_id) REFERENCES player(id) ON DELETE CASCADE,

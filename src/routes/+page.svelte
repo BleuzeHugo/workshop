@@ -1,8 +1,14 @@
 <script>
   import { onMount, onDestroy } from "svelte";
   import { getSocket } from "$lib/socket";
-  import { goto } from '$app/navigation';
-  import { savePlayer, getStoredPlayer, verifyToken, clearPlayer, restoreSession } from '$lib/auth';
+  import { goto } from "$app/navigation";
+  import {
+    savePlayer,
+    getStoredPlayer,
+    verifyToken,
+    clearPlayer,
+    restoreSession,
+  } from "$lib/auth";
 
   let playerName = "";
   let player = null;
@@ -15,81 +21,84 @@
   let sessionError = false;
 
   onMount(async () => {
-    console.log('=== DÉBUT MOUNT ===');
-    
+    console.log("=== DÉBUT MOUNT ===");
+
     try {
       // Essai de restauration de session
       const restoredPlayer = await restoreSession();
       if (restoredPlayer) {
         player = restoredPlayer;
-        console.log('✅ Session restaurée:', player.name);
+        console.log("✅ Session restaurée:", player.name);
         // Charger l'appartenance au groupe ET les groupes en parallèle
         await Promise.all([loadPlayerMembership(), loadGroups()]);
       }
     } catch (error) {
-      console.error('❌ Erreur restauration:', error);
+      console.error("❌ Erreur restauration:", error);
       sessionError = true;
     } finally {
       restoringSession = false;
-      console.log('🔚 Restauration terminée, player:', player ? player.name : 'null');
+      console.log(
+        "🔚 Restauration terminée, player:",
+        player ? player.name : "null"
+      );
     }
 
     // Initialiser Socket.IO
     socket = getSocket();
-    
-    socket.on('game:created', (newGame) => {
-      console.log('🎮 Nouveau groupe:', newGame.name);
-      if (!groups.find(g => g.id === newGame.id)) {
+
+    socket.on("game:created", (newGame) => {
+      console.log("🎮 Nouveau groupe:", newGame.name);
+      if (!groups.find((g) => g.id === newGame.id)) {
         groups = [newGame, ...groups];
       }
     });
 
-    socket.on('game:updated', (updatedGame) => {
-      console.log('🔄 Groupe mis à jour:', updatedGame.name);
-      groups = groups.map(group => 
+    socket.on("game:updated", (updatedGame) => {
+      console.log("🔄 Groupe mis à jour:", updatedGame.name);
+      groups = groups.map((group) =>
         group.id === updatedGame.id ? updatedGame : group
       );
-      
+
       // Si le groupe actuel du joueur a été mis à jour
       if (currentPlayerGroup && currentPlayerGroup.id === updatedGame.id) {
         currentPlayerGroup = updatedGame;
       }
-      
+
       // Recharger l'appartenance si le joueur a rejoint/quitté un groupe
       if (player) {
         loadPlayerMembership();
       }
     });
 
-    console.log('=== FIN MOUNT ===');
+    console.log("=== FIN MOUNT ===");
   });
 
   onDestroy(() => {
     if (socket) {
-      socket.off('game:created');
-      socket.off('game:updated');
+      socket.off("game:created");
+      socket.off("game:updated");
     }
   });
 
   async function loadPlayerMembership() {
     if (!player) return;
-    
+
     try {
-      console.log('🔍 Chargement membership...');
+      console.log("🔍 Chargement membership...");
       const res = await fetch(`/api/games/player/${player.id}/membership`);
       if (res.ok) {
         const data = await res.json();
-        console.log('📊 Données membership:', data);
-        
+        console.log("📊 Données membership:", data);
+
         if (data.inGroup) {
           currentPlayerGroup = data.game;
-          console.log('🎯 Dans le groupe:', currentPlayerGroup.name);
+          console.log("🎯 Dans le groupe:", currentPlayerGroup.name);
         } else {
           currentPlayerGroup = null;
-          console.log('👤 Pas dans un groupe');
+          console.log("👤 Pas dans un groupe");
         }
       } else {
-        console.log('❌ Erreur HTTP membership:', res.status);
+        console.log("❌ Erreur HTTP membership:", res.status);
       }
     } catch (error) {
       console.error("❌ Erreur chargement membership:", error);
@@ -98,13 +107,13 @@
 
   async function loadGroups() {
     try {
-      console.log('🔍 Chargement groupes...');
+      console.log("🔍 Chargement groupes...");
       const res = await fetch("/api/games");
       if (res.ok) {
         groups = await res.json();
         console.log(`📋 ${groups.length} groupes chargés`);
       } else {
-        console.log('❌ Erreur HTTP groupes:', res.status);
+        console.log("❌ Erreur HTTP groupes:", res.status);
       }
     } catch (error) {
       console.error("❌ Erreur chargement groupes:", error);
@@ -113,20 +122,20 @@
 
   async function createPlayer() {
     if (!playerName.trim()) return;
-    
+
     loading = true;
     try {
-      console.log('👤 Création joueur:', playerName);
+      console.log("👤 Création joueur:", playerName);
       const res = await fetch("/api/players", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: playerName.trim() })
+        body: JSON.stringify({ name: playerName.trim() }),
       });
-      
+
       if (res.ok) {
         player = await res.json();
         savePlayer(player);
-        console.log('✅ Joueur créé:', player.name);
+        console.log("✅ Joueur créé:", player.name);
         currentPlayerGroup = null;
         await loadGroups();
       } else {
@@ -143,17 +152,17 @@
 
   async function createGroup() {
     if (!newGroupName.trim()) return;
-    
+
     try {
       const res = await fetch("/api/games", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newGroupName.trim() })
+        body: JSON.stringify({ name: newGroupName.trim() }),
       });
-      
+
       if (res.ok) {
         const data = await res.json();
-        console.log('🏗️ Groupe créé:', data.name);
+        console.log("🏗️ Groupe créé:", data.name);
         newGroupName = "";
       } else {
         const error = await res.json();
@@ -175,15 +184,15 @@
       const res = await fetch(`/api/games/${groupId}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId: player.id })
+        body: JSON.stringify({ playerId: player.id }),
       });
-      
+
       const data = await res.json();
-      
+
       if (data.error) {
         alert(data.error);
       } else {
-        console.log('✅ Rejoint groupe:', groupId);
+        console.log("✅ Rejoint groupe:", groupId);
         // Mettre à jour l'appartenance avant la redirection
         await loadPlayerMembership();
         goto(`/group/${groupId}`);
@@ -195,7 +204,7 @@
   }
 
   function disconnect() {
-    console.log('👋 Déconnexion');
+    console.log("👋 Déconnexion");
     clearPlayer();
     player = null;
     playerName = "";
@@ -205,23 +214,23 @@
 
   async function leaveCurrentGroup() {
     if (!currentPlayerGroup) return;
-    
+
     if (confirm(`Quitter le groupe "${currentPlayerGroup.name}" ?`)) {
       try {
         const res = await fetch(`/api/games/${currentPlayerGroup.id}/leave`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ playerId: player.id })
+          body: JSON.stringify({ playerId: player.id }),
         });
-        
+
         const data = await res.json();
-        
+
         if (data.error) {
           alert(data.error);
         } else {
           currentPlayerGroup = null;
           await loadGroups();
-          console.log('🚪 Groupe quitté');
+          console.log("🚪 Groupe quitté");
         }
       } catch (error) {
         console.error("❌ Erreur quitter groupe:", error);
@@ -232,155 +241,175 @@
 
   // Fonction pour forcer le chargement en cas de blocage
   function forceLoad() {
-    console.log('🔄 Forçage chargement...');
+    console.log("Forçage chargement...");
     restoringSession = false;
     sessionError = false;
   }
 </script>
 
-<div class="container">
-  {#if restoringSession}
-    <div class="loading-section">
-      <div class="spinner"></div>
-      <p>Restauration de votre session...</p>
-      {#if sessionError}
-        <p class="error-message">Erreur de chargement</p>
-      {/if}
-      <button on:click={forceLoad} class="force-btn">
-        Si ça bloque, cliquez ici
-      </button>
-    </div>
-  
-  {:else if !player}
-    <div class="player-creation">
-      <h1>🎮 Créer ton joueur</h1>
-      <p class="session-info">
-        💡 Ton pseudo sera sauvegardé automatiquement !
-      </p>
-      <div class="input-group">
-        <input 
-          placeholder="Ton pseudo" 
-          bind:value={playerName} 
-          maxlength="20"
-        />
-        <button 
-          class="create-btn" 
-          on:click={createPlayer} 
-          disabled={!playerName.trim() || loading}
-        >
-          {#if loading}Création...{:else}Créer mon joueur{/if}
+<div class="page">
+  <div class="container">
+    {#if restoringSession}
+      <div class="loading-section">
+        <div class="spinner"></div>
+        <p>Restauration de votre session...</p>
+        {#if sessionError}
+          <p class="error-message">Erreur de chargement</p>
+        {/if}
+        <button on:click={forceLoad} class="force-btn">
+          Si ça bloque, cliquez ici
         </button>
       </div>
-    </div>
-  
-  {:else}
-    <div class="game-section">
-      <div class="player-header">
-        <div class="player-info">
-          <h2>
-            <span class="status-indicator status-online"></span>
-            Bienvenue, <strong>{player.name}</strong> 👋
-          </h2>
-          <p class="session-saved">✅ Session sauvegardée</p>
+    {:else if !player}
+      <div class="player-creation">
+        <h1>Créer ton joueur</h1>
+        <div class="input-group">
+          <input
+            placeholder="Ton pseudo"
+            bind:value={playerName}
+            maxlength="20"
+          />
+          <button
+            class="create-btn"
+            on:click={createPlayer}
+            disabled={!playerName.trim() || loading}
+          >
+            {#if loading}Création...{:else}Créer mon joueur{/if}
+          </button>
         </div>
-        <button class="disconnect-btn" on:click={disconnect}>
-          Déconnexion
-        </button>
       </div>
-
-      {#if currentPlayerGroup}
-        <div class="current-group">
-          <div class="current-group-header">
-            <h3>🎯 Tu es déjà dans un groupe</h3>
-            <button class="leave-group-btn" on:click={leaveCurrentGroup}>
-              Quitter
-            </button>
-          </div>
-          <div class="current-group-content">
-            <div class="group-details">
-              <strong>{currentPlayerGroup.name}</strong>
-              <span class="player-count-badge">{currentPlayerGroup.player_count}/4 joueurs</span>
-            </div>
-            <button class="join-btn" on:click={() => goto(`/group/${currentPlayerGroup.id}`)}>
-              Rejoindre
-            </button>
-          </div>
-        </div>
-      {:else}
-        <div class="game-section">
-          <h3>🏗️ Créer un groupe</h3>
-          <div class="input-group">
-            <input 
-              placeholder="Nom du groupe" 
-              bind:value={newGroupName} 
-              maxlength="30"
-            />
-            <button class="create-btn" on:click={createGroup} disabled={!newGroupName.trim()}>
-              Créer le groupe
-            </button>
-          </div>
-        </div>
-      {/if}
-
+    {:else}
       <div class="game-section">
-        <div class="section-header">
-          <h3>👥 Groupes disponibles</h3>
-          <span class="real-time-badge">
-            <span class="pulse-dot"></span>
-            Temps réel
-          </span>
+        <div class="player-header">
+          <div class="player-info">
+            <h2>
+              <span class="status-indicator status-online"></span>
+              Bienvenue, <strong>{player.name}</strong>
+            </h2>
+          </div>
+          <button class="disconnect-btn" on:click={disconnect}>
+            Déconnexion
+          </button>
         </div>
-        
-        {#if groups.length === 0}
-          <div class="empty-state">
-            <p>🎯 Aucun groupe disponible.</p>
-            <p>Sois le premier à en créer un ! 🚀</p>
+
+        {#if currentPlayerGroup}
+          <div class="current-group">
+            <div class="current-group-header">
+              <h3>Tu es déjà dans un groupe</h3>
+              <button class="leave-group-btn" on:click={leaveCurrentGroup}>
+                Quitter
+              </button>
+            </div>
+            <div class="current-group-content">
+              <div class="group-details">
+                <strong>{currentPlayerGroup.name}</strong>
+                <span class="player-count-badge"
+                  >{currentPlayerGroup.player_count}/4 joueurs</span
+                >
+              </div>
+              <button
+                class="join-btn"
+                on:click={() => goto(`/group/${currentPlayerGroup.id}`)}
+              >
+                Rejoindre
+              </button>
+            </div>
           </div>
         {:else}
-          <div class="groups-list">
-            {#each groups as group}
-              <div class="group-card">
-                <div class="group-info">
-                  <div class="group-name">{group.name}</div>
-                  <div class="group-meta">
-                    <span class="player-count">{group.player_count}/4 joueurs</span>
-                    {#if group.player_count === 4}
-                      <span class="status-badge full">🔒 Complet</span>
-                    {:else if group.player_count === 3}
-                      <span class="status-badge almost-full">⚠️ Presque complet</span>
-                    {/if}
-                  </div>
-                </div>
-                <button 
-                  class="join-btn" 
-                  on:click={() => joinGroup(group.id)} 
-                  disabled={group.player_count >= 4 || currentPlayerGroup}
-                >
-                  {#if currentPlayerGroup}
-                    Déjà dans un groupe
-                  {:else if group.player_count >= 4}
-                    Complet
-                  {:else}
-                    Rejoindre
-                  {/if}
-                </button>
-              </div>
-            {/each}
+          <div class="game-section-mini">
+            <h3>Créer un groupe</h3>
+            <div class="input-group">
+              <input
+                placeholder="Nom du groupe"
+                bind:value={newGroupName}
+                maxlength="30"
+              />
+              <button
+                class="create-btn"
+                on:click={createGroup}
+                disabled={!newGroupName.trim()}
+              >
+                Créer le groupe
+              </button>
+            </div>
           </div>
         {/if}
+
+        <div class="game-section-mini">
+          <div class="section-header">
+            <h3>Groupes disponibles</h3>
+          </div>
+
+          {#if groups.length === 0}
+            <div class="empty-state">
+              <p>Aucun groupe disponible.</p>
+              <p>Sois le premier à en créer un !</p>
+            </div>
+          {:else}
+            <div class="groups-list">
+              {#each groups as group}
+                <div class="group-card">
+                  <div class="group-info">
+                    <div class="group-name">{group.name}</div>
+                    <div class="group-meta">
+                      <span class="player-count"
+                        >{group.player_count}/4 joueurs</span
+                      >
+                      {#if group.player_count === 4}
+                        <span class="status-badge full">🔒 Complet</span>
+                      {:else if group.player_count === 3}
+                        <span class="status-badge almost-full"
+                          >⚠️ Presque complet</span
+                        >
+                      {/if}
+                    </div>
+                  </div>
+                  <button
+                    class="join-btn"
+                    on:click={() => joinGroup(group.id)}
+                    disabled={group.player_count >= 4 || currentPlayerGroup}
+                  >
+                    {#if currentPlayerGroup}
+                      Déjà dans un groupe
+                    {:else if group.player_count >= 4}
+                      Complet
+                    {:else}
+                      Rejoindre
+                    {/if}
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
       </div>
-    </div>
-  {/if}
+    {/if}
+  </div>
 </div>
 
 <style>
+  :root {
+    --bg: rgba(255, 255, 255, 0.06);
+    --text: #e5e5e5;
+    --color-primary: rgba(0, 94, 68, 0.5);
+    --color-secondary: rgba(103, 174, 142, 0.5);
+    /* --color-primary: #005e44; */
+    /* --color-secondary: #67ae8e; */
+  }
+  .page {
+    /* min-height: 100vh; */
+    background-image: url("../lib/assets/foret.jpg");
+    background-size: cover;
+    background-position: center;
+    /* padding: 20px; */
+  }
+
   .container {
     max-width: 600px;
     margin: 0 auto;
     padding: 2rem;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     min-height: 100vh;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   }
 
   /* Section de chargement */
@@ -389,7 +418,7 @@
     padding: 4rem 2rem;
     background: white;
     border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   }
 
   .spinner {
@@ -418,17 +447,30 @@
   }
 
   @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
   }
 
   /* Création de joueur */
   .player-creation {
-    background: white;
+    /* background: white; */
     padding: 2.5rem;
     border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    /* box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); */
     text-align: center;
+
+    /* background: var(--bg); */
+    border-radius: 2rem;
+    backdrop-filter: blur(2px);
+    box-shadow:
+      inset 1px 1px 4px rgba(255, 255, 255, 0.2),
+      inset -1px -1px 6px rgba(0, 0, 0, 0.3),
+      0 4px 12px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
   }
 
   .player-creation h1 {
@@ -446,10 +488,26 @@
 
   /* Sections de jeu */
   .game-section {
-    background: white;
+    /* background: white; */
+    padding: 2rem;
+    /* border-radius: 16px; */
+    /* box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); */
+    margin-bottom: 1.5rem;
+    border-radius: 2rem;
+    backdrop-filter: blur(2px);
+    box-shadow:
+      inset 1px 1px 4px rgba(255, 255, 255, 0.2),
+      inset -1px -1px 6px rgba(0, 0, 0, 0.3),
+      0 4px 12px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+  }
+
+  .game-section-mini {
+    /* background: white; */
+    background: linear-gradient(135deg, var(--color-secondary), var(--color-primary));
     padding: 2rem;
     border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
     margin-bottom: 1.5rem;
   }
 
@@ -470,7 +528,7 @@
   }
 
   .session-saved {
-    color: #4CAF50;
+    color: #4caf50;
     font-size: 0.9rem;
     margin: 0;
     font-weight: 500;
@@ -490,7 +548,7 @@
   }
 
   .real-time-badge {
-    background: #4CAF50;
+    background: #4caf50;
     color: white;
     padding: 0.4rem 0.8rem;
     border-radius: 20px;
@@ -510,9 +568,15 @@
   }
 
   @keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.5; }
-    100% { opacity: 1; }
+    0% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+    100% {
+      opacity: 1;
+    }
   }
 
   /* Indicateur de statut */
@@ -525,13 +589,13 @@
   }
 
   .status-online {
-    background: #4CAF50;
+    background: #4caf50;
   }
 
   /* Groupes actuels */
   .current-group {
     background: #e8f5e8;
-    border: 2px solid #4CAF50;
+    border: 2px solid #4caf50;
     border-radius: 12px;
     padding: 1.5rem;
     margin: 1.5rem 0;
@@ -562,7 +626,7 @@
   }
 
   .player-count-badge {
-    background: #4CAF50;
+    background: #4caf50;
     color: white;
     padding: 0.3rem 0.8rem;
     border-radius: 12px;
@@ -588,7 +652,7 @@
 
   .group-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
     border-color: #667eea;
   }
 
@@ -689,7 +753,7 @@
   }
 
   .create-btn {
-    background: #4CAF50;
+    background: #4caf50;
     color: white;
   }
 
@@ -699,14 +763,14 @@
   }
 
   .join-btn {
-    background: #2196F3;
+    background: #2196f3;
     color: white;
     padding: 0.6rem 1.2rem;
     font-size: 0.9rem;
   }
 
   .join-btn:hover:not(:disabled) {
-    background: #1976D2;
+    background: #1976d2;
     transform: translateY(-2px);
   }
 

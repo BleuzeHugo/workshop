@@ -103,6 +103,5 @@ CREATE TABLE player_answers (
 
 INSERT INTO theme (name) VALUES
 ('Air'),
-('Chemistry'),
 ('Energy'),
 ('Water');

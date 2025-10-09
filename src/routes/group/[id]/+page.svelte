@@ -215,9 +215,7 @@
   const themeRoutes = {
     'Air': '/air',
     'Energy': '/energy', 
-    'Forest': '/forest',
     'Water': '/water',
-    'Chemistry': '/chemistry'
   };
 
   const gameRoute = themeRoutes[theme.name] || '/game';

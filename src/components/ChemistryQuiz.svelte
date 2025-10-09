@@ -1,7 +1,7 @@
 <script>
-  import { goto } from "$app/navigation";
+  import { createEventDispatcher } from 'svelte';
+  const dispatch = createEventDispatcher();
 
-  // Coefficients (a, b, c, d)
   let coeffs = ["", "", "", ""];
   let message = "";
   let solved = false;
@@ -23,9 +23,7 @@
   }
 
   function handleChange(index, value) {
-    const updated = [...coeffs];
-    updated[index] = value;
-    coeffs = updated;
+    coeffs[index] = value;
   }
 
   function handleSubmit() {
@@ -33,7 +31,7 @@
       message = "✅ Correct ! La réaction est équilibrée.";
       solved = true;
       localStorage.setItem("chemCompleted", "true");
-      setTimeout(() => goto("/hub"), 1500);
+      dispatch('solve'); // <- informe le parent
     } else {
       message = "❌ Incorrect, réessaie !";
     }
@@ -45,33 +43,13 @@
   <p>Remplis les coefficients entiers pour équilibrer l’équation :</p>
 
   <div class="equation">
-    <input
-      type="number"
-      bind:value={coeffs[0]}
-      on:input={(e) => handleChange(0, e.target.value)}
-      disabled={solved}
-    />
+    <input type="number" bind:value={coeffs[0]} on:input={(e) => handleChange(0, e.target.value)} disabled={solved} />
     C₃H₈ + 
-    <input
-      type="number"
-      bind:value={coeffs[1]}
-      on:input={(e) => handleChange(1, e.target.value)}
-      disabled={solved}
-    />
+    <input type="number" bind:value={coeffs[1]} on:input={(e) => handleChange(1, e.target.value)} disabled={solved} />
     O₂ → 
-    <input
-      type="number"
-      bind:value={coeffs[2]}
-      on:input={(e) => handleChange(2, e.target.value)}
-      disabled={solved}
-    />
+    <input type="number" bind:value={coeffs[2]} on:input={(e) => handleChange(2, e.target.value)} disabled={solved} />
     CO₂ + 
-    <input
-      type="number"
-      bind:value={coeffs[3]}
-      on:input={(e) => handleChange(3, e.target.value)}
-      disabled={solved}
-    />
+    <input type="number" bind:value={coeffs[3]} on:input={(e) => handleChange(3, e.target.value)} disabled={solved} />
     H₂O
   </div>
 
@@ -87,6 +65,7 @@
     </p>
   {/if}
 </div>
+
 
 <style>
   .chem-quiz {

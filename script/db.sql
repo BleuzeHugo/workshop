@@ -9,7 +9,7 @@ USE escape_game;
 -- =====================================================
 CREATE TABLE theme (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name ENUM('FORET', 'ENERGIE', 'AIR', 'EAU') NOT NULL
+    name VARCHAR(255) NOT NULL
 );
 
 -- =====================================================
@@ -51,6 +51,7 @@ CREATE TABLE level (
 CREATE TABLE game_level (
     game_id INT NOT NULL,
     level_id INT NOT NULL,
+    is_finished BOOLEAN DEFAULT FALSE,
     PRIMARY KEY (game_id, level_id),
     FOREIGN KEY (game_id) REFERENCES game(id) ON DELETE CASCADE,
     FOREIGN KEY (level_id) REFERENCES level(id) ON DELETE CASCADE
@@ -95,3 +96,14 @@ CREATE TABLE player_answers (
     FOREIGN KEY (player_id) REFERENCES player(id) ON DELETE CASCADE,
     FOREIGN KEY (question_id) REFERENCES question(id) ON DELETE CASCADE
 );
+
+-- =====================================================
+-- INSERT
+-- =====================================================
+
+INSERT INTO theme (name) VALUES
+('Air'),
+('Chemistry'),
+('Energy'),
+('Forest'),
+('Water');

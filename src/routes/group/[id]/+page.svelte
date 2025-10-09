@@ -13,6 +13,7 @@
   let isReady = false;
   let loading = true;
   let gameStarted = false;
+  let startingGame = false;
 
   const groupId = $page.params.id;
 
@@ -53,11 +54,11 @@
       });
 
       // Écouter le lancement du jeu
-      socket.on("game:started", () => {
-        console.log("🎮 Début de la partie !");
+      socket.on("game:started", (data) => {
+        console.log("🎮 Début de la partie !", data);
         gameStarted = true;
-        // Ici tu peux rediriger vers le jeu ou afficher un message
-        showGameStartMessage();
+        startingGame = false;
+        showGameStartMessage(data.theme);
       });
     }
 
@@ -155,63 +156,94 @@
     const allReady =
       readyPlayers.size === players.length && players.length >= 2;
 
-    if (allReady && !gameStarted) {
+    if (allReady && !gameStarted && !startingGame) {
       console.log("Tous les joueurs sont prêts ! Lancement de la partie...");
       startGameAutomatically();
     }
   }
 
-  function startGameAutomatically() {
-    if (gameStarted) return;
+  async function startGameAutomatically() {
+    if (gameStarted || startingGame) return;
 
-    console.log("OK - La partie peut commencer !");
-    gameStarted = true;
+    startingGame = true;
+    console.log("🚀 Lancement de la partie...");
 
-    // Émettre l'événement de début de partie à tous les clients
-    socket.emit("game:start", groupId);
+    try {
+      const res = await fetch(`/api/party/${groupId}/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
 
-    // Afficher un message à tous les joueurs
-    showGameStartMessage();
-  }
-
-  function showGameStartMessage() {
-    // Créer une overlay pour annoncer le début de la partie
-    const overlay = document.createElement("div");
-    overlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.8);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-      color: white;
-      font-family: Arial, sans-serif;
-    `;
-
-    overlay.innerHTML = `
-      <div style="text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 3rem; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
-        <h1 style="font-size: 3rem; margin: 0 0 1rem 0;">🎮 C'est parti !</h1>
-        <p style="font-size: 1.5rem; margin: 0 0 2rem 0;">Tous les joueurs sont prêts !</p>
-        <p style="font-size: 1.2rem; opacity: 0.9;">La partie va commencer...</p>
-        <button onclick="this.parentElement.parentElement.remove()" style="margin-top: 2rem; padding: 1rem 2rem; font-size: 1.2rem; background: #4CAF50; color: white; border: none; border-radius: 10px; cursor: pointer;">
-          OK
-        </button>
-      </div>
-    `;
-
-    document.body.appendChild(overlay);
-
-    // Enlever l'overlay après 5 secondes automatiquement
-    setTimeout(() => {
-      if (overlay.parentElement) {
-        overlay.remove();
+      if (res.ok) {
+        const data = await res.json();
+        console.log("✅ Partie créée:", data);
+        // L'événement Socket.IO game:started sera émis par le serveur
+      } else {
+        const error = await res.json();
+        console.error("❌ Erreur création partie:", error);
+        startingGame = false;
+        alert(error.error || "Erreur lors du démarrage");
       }
-    }, 5000);
+    } catch (error) {
+      console.error("❌ Erreur création partie:", error);
+      startingGame = false;
+      alert("Erreur de connexion");
+    }
   }
+
+  function showGameStartMessage(theme) {
+  // Créer une overlay pour annoncer le début de la partie
+  const overlay = document.createElement("div");
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    color: white;
+    font-family: Arial, sans-serif;
+  `;
+
+  const themeMessage = theme ? `<p style="font-size: 1.5rem; margin: 1rem 0; color: #4CAF50;">Thème : ${theme.name}</p>` : '';
+
+  // Déterminer l'URL de redirection basée sur le thème
+  const themeRoutes = {
+    'Air': '/air',
+    'Energy': '/energy', 
+    'Forest': '/forest',
+    'Water': '/water',
+    'Chemistry': '/chemistry'
+  };
+
+  const gameRoute = themeRoutes[theme.name] || '/game';
+
+  overlay.innerHTML = `
+    <div style="text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 3rem; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+      <h1 style="font-size: 3rem; margin: 0 0 1rem 0;">🎮 C'est parti !</h1>
+      <p style="font-size: 1.5rem; margin: 0 0 1rem 0;">Tous les joueurs sont prêts !</p>
+      ${themeMessage}
+      <p style="font-size: 1.2rem; opacity: 0.9; margin: 2rem 0;">Redirection vers le jeu...</p>
+      <button onclick="this.parentElement.parentElement.remove(); window.location.href='${gameRoute}'" style="margin-top: 1rem; padding: 1rem 2rem; font-size: 1.2rem; background: #4CAF50; color: white; border: none; border-radius: 10px; cursor: pointer;">
+        Commencer maintenant
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // Redirection automatique après 5 secondes
+  setTimeout(() => {
+    if (overlay.parentElement) {
+      overlay.remove();
+    }
+    goto(gameRoute);
+  }, 5000);
+}
 
   async function leaveGroup() {
     if (confirm("Veux-tu vraiment quitter ce groupe ?")) {
@@ -248,6 +280,12 @@
         <p>Groupe de jeu - En attente des joueurs</p>
         <div class="group-meta">
           <span class="player-count">{group.player_count}/4 joueurs</span>
+          {#if startingGame}
+            <div class="starting-indicator">
+              <div class="pulse"></div>
+              Démarrage...
+            </div>
+          {/if}
         </div>
       </div>
 
@@ -258,6 +296,9 @@
             <div
               class="player-card {readyPlayers.has(player.id) ? 'ready' : ''}"
             >
+              <div class="player-avatar">
+                {player.name.charAt(0).toUpperCase()}
+              </div>
               <div class="player-info">
                 <div class="player-name">
                   {player.name}
@@ -266,7 +307,7 @@
                   {/if}
                 </div>
                 <div class="player-status">
-                  {readyPlayers.has(player.id) ? "Prêt" : " En attente"}
+                  {readyPlayers.has(player.id) ? "Prêt" : "En attente"}
                 </div>
               </div>
               {#if readyPlayers.has(player.id)}
@@ -284,8 +325,7 @@
           {#if readyPlayers.size === players.length && players.length >= 2}
             <span class="all-ready">Tous prêts ! Début de la partie...</span>
           {:else if readyPlayers.size === players.length && players.length < 2}
-            <span class="waiting-players">En attente de plus de joueurs...</span
-            >
+            <span class="waiting-players">En attente de plus de joueurs...</span>
           {/if}
         </div>
 
@@ -293,6 +333,7 @@
           <button
             class="ready-btn {isReady ? 'ready' : ''}"
             on:click={toggleReady}
+            disabled={startingGame}
           >
             {#if isReady}
               Annuler Prêt
@@ -305,19 +346,20 @@
         {#if gameStarted}
           <div class="game-started-message">
             <h3>La partie a commencé !</h3>
-            <p>Bonne chance à tous les joueurs !</p>
+            <p>Redirection vers le jeu...</p>
           </div>
         {/if}
       </div>
+      
 
       <div class="footer-actions">
-        <button class="leave-btn" on:click={leaveGroup}>
-          Quitter le groupe
+        <button class="leave-btn" on:click={leaveGroup} disabled={startingGame}>
+          🚪 Quitter le groupe
         </button>
       </div>
     {:else}
       <div class="error-section">
-        <h2>Impossible d'accéder au groupe</h2>
+        <h2>❌ Impossible d'accéder au groupe</h2>
         <p>Le groupe n'existe pas ou vous n'y avez pas accès.</p>
         <button class="ready-btn" on:click={() => goto("/")}>
           Retour à l'accueil
@@ -332,6 +374,8 @@
     background-image: url("../../../lib/assets/foret.jpg");
     background-size: cover;
     background-position: center;
+    min-height: 100vh;
+    padding: 1rem;
   }
 
   .group-container {
@@ -346,6 +390,7 @@
     margin: 0 auto;
     padding: 2rem;
     font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    background: rgba(255, 255, 255, 0.95);
   }
 
   .group-header {
@@ -368,6 +413,7 @@
     align-items: center;
     gap: 1rem;
     margin-top: 1rem;
+    flex-wrap: wrap;
   }
 
   .player-count {
@@ -377,6 +423,16 @@
     font-size: 0.9rem;
   }
 
+  .starting-indicator {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    gap: 0.5rem;
+  }
+
   .players-section {
     margin-bottom: 2rem;
   }
@@ -384,6 +440,7 @@
   .players-section h2 {
     color: #333;
     margin-bottom: 1rem;
+    text-align: center;
   }
 
   .players-grid {
@@ -409,6 +466,19 @@
     background: #f1f8e9;
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+  }
+
+  .player-avatar {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 1.2rem;
   }
 
   .player-info {
@@ -498,7 +568,7 @@
     font-weight: 600;
   }
 
-  .ready-btn:hover {
+  .ready-btn:hover:not(:disabled) {
     background: #45a049;
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
@@ -508,9 +578,15 @@
     background: #ff9800;
   }
 
-  .ready-btn.ready:hover {
+  .ready-btn.ready:hover:not(:disabled) {
     background: #f57c00;
     box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
+  }
+
+  .ready-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
   }
 
   .game-started-message {
@@ -536,9 +612,14 @@
     transition: all 0.3s;
   }
 
-  .leave-btn:hover {
+  .leave-btn:hover:not(:disabled) {
     background: #cc0000;
     transform: translateY(-2px);
+  }
+
+  .leave-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
   }
 
   .loading {
@@ -555,21 +636,11 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   }
 
-  .real-time-indicator {
-    display: inline-flex;
-    align-items: center;
-    background: rgba(255, 255, 255, 0.2);
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    font-size: 0.9rem;
-  }
-
   .pulse {
     width: 8px;
     height: 8px;
     background: #4caf50;
     border-radius: 50%;
-    margin-right: 0.5rem;
     animation: pulse 2s infinite;
   }
 
@@ -597,6 +668,11 @@
 
     .players-grid {
       grid-template-columns: 1fr;
+    }
+
+    .group-meta {
+      flex-direction: column;
+      gap: 0.5rem;
     }
   }
 </style>

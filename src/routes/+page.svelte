@@ -704,7 +704,7 @@
   .empty-state {
     text-align: center;
     padding: 3rem 2rem;
-    color: #666;
+    color: black;
   }
 
   .empty-state p {

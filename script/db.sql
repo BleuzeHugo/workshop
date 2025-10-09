@@ -105,5 +105,4 @@ INSERT INTO theme (name) VALUES
 ('Air'),
 ('Chemistry'),
 ('Energy'),
-('Forest'),
 ('Water');

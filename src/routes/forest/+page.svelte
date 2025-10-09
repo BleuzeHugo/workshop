@@ -1,1 +1,0 @@
-<h1>Test Escape Game</h1>
